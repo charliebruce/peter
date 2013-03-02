@@ -1,0 +1,7 @@
+BUGS:
+
+Applet canvas drawn off centre.
+Nothing exists. Do stuff!
+goFullscreen fails to change res.
+
+Deal with proper disposal of connections. Currently, 40k "scars"

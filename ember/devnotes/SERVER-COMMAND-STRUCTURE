@@ -1,0 +1,5 @@
+Server structure for commands.  PROPOSED MODEL
+
+Command comes in. Engine ticks player. Player packet handler produces a Command and returns to player.
+Engine then ticks all Commanders. Commander interface goes through commands, verifies them and runs.
+World is hence updated. 

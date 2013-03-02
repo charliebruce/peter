@@ -1,0 +1,4 @@
+Game World layout:
+
+Location is a tile-by-tile representation. System is x+ is down and right, y+ is up and right. 
+

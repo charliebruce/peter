@@ -1,0 +1,11 @@
+ENCRYCPTION
+
+When encryption is implemented, exchange is as follows:
+
+Client generates a key using random (seed with client nanotime?)
+Key is RSA-encryped using pubkey, and sent in a handshake.
+Both connection managers immediately activate encryption. 
+Channel is now secured by stream cypher.
+Further encryption can be implemented by changing the constants. 
+
+Server sends a new key randomly in the encrypted channel.

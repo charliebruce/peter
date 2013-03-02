@@ -1,0 +1,63 @@
+Plan:
+2D CommandNConquer->3D-ish CNC?->3D Platform(no sig improv.),Zombie House(AI mgr),/popular/dark halflife
+
+Ember:
+Client extends engine
+Client:
+	Net
+	LobbyInterface?
+	Gamelogic
+	Maploader/Voxel Engine??
+
+Engine:
+	Graphics
+	Cache/FS
+	Locations/Spaces
+	Sound (perhaps locational)
+	Interfaces
+	Resource management (cache-based FS, requester, similar to steam?)
+Server:
+	All in one unit
+	Basic AI
+	Modular access to backend (acct, profile, etc)
+	Data via HTTP?
+	Pathfinder
+Editor:
+	Extends engine and client?
+	Mapmaker
+	Voxel-maker (lego bricks)
+	Pushes data into a running server/client combo
+
+
+
+Ember 3D (V2):
+Client extends engine
+Client:
+	Relatively little coding extends engine base features
+Engine:
+	OLD Stuff
+	Networking subsystem moved here?
+	Full interface system?
+	3D code
+
+Server:
+	Better dissociation between game, modules, and base
+	Multiple machines running backups, accts, games etc.
+	Better anticheat?
+
+	
+	
+	
+
+Magma 3D (V3)
+Client:
+	No longer exists separately - engine is configured instead.
+Engine:
+	Scripting
+	Physics system
+	World system/scenegraphology
+	Full DLL/Native?
+	
+Editor:
+	Preprocessor
+	Packager/WorldStreamer/ResourceManager

@@ -1,0 +1,29 @@
+Connection process:
+
+Game:
+Client connects, sends "Game Connection" type. Handled in SocketManager.
+Server returns ConnectCode applicable - should be 1 - CONNECTION_OK. If not, client informs user accordingly.
+Client and server can now transmit packets - the connection is currently insecure, and the client must auth.
+Handling passed to LoginHandler thread.
+
+Client sends packet ID 1, with RSA-encrypted login credentials WITH STREAM CIPHER KEY
+LoginHandler decrypts the login block and loads the given profile.
+ProfileWorkerThread sends acknowledgement packet, now using the given cipher key for encryption. 
+Connection is now secure.
+
+Heartbeat starts now, and the connection is handed over to the lobby (where successful). 
+
+The client informs the user accordingly of results in the acknowledge packet (pw bad etc) or success. 
+A fail at this point could close or re-use the session depending on time?
+
+Game then hands over to packethandler system, lobby, games etc and is fun. :)
+
+Data:
+Client connects, sends "Update Connection" type.
+Server returns ConnectCode applicable - should be 1 - CONNECTION_OK. If not, client informs user accordingly.
+Client and server can now transmit packets - the connection is currently insecure.
+
+The client can then request data. The server transmits accordingly. Strings, shaders, data etc sent?
+
+Special circumstances (development):
+Server can send a replace/add/reloadResource command along the update channel?
