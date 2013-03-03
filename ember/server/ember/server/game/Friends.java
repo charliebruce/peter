@@ -5,7 +5,6 @@ import java.util.List;
 
 /**
  * Manages friends and ignores.
- *
  */
 public class Friends {
 

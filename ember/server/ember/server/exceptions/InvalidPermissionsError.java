@@ -1,7 +1,7 @@
 package ember.server.exceptions;
 /**
  * Thrown when a profile attempts to do something which it is not allowed to do.
- * These events could be logged perhaps?
+ * These events should eventually be logged and monitored to ensure aren't malicious.
  * @author charlie
  *
  */

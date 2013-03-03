@@ -29,7 +29,7 @@ public class SocketManager {
 	public static void listen(){		
 		try {
 
-			serverChannel = new ServerSocket(Server.PORT,ServerConstants.BACKLOG);
+			serverChannel = new ServerSocket(ServerConstants.PORT,ServerConstants.BACKLOG);
 		
 		} catch (IOException e) {
 			

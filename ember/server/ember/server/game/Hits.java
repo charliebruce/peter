@@ -2,6 +2,7 @@ package ember.server.game;
 
 /**
  * Handles player hits.
+ * TODO from RS2
  */
 public class Hits {
 

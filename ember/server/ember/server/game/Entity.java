@@ -73,12 +73,17 @@ public abstract class Entity {
             hp = hpMax;
         }
     }
+    
+    public void healFully(){
+    	hp = hpMax;
+    }
 
 	public Entity(World w, Location l) {
 		this.location = l;
 		this.origin = l;
 		this.world = w;
-		this.queue = new TravelQueue(this);
+		if(traveltype!=TravelType.IMMOBILE)
+			this.queue = new TravelQueue(this);
 	}
 
 	public void teleport(Location location) {

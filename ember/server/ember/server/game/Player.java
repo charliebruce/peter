@@ -25,9 +25,6 @@ public class Player implements Commander {
 	private transient Hud hud;
 	private transient Queue<Packet> queuedPackets;
 	private transient PlayerUpdateFlags updateFlags;
-	private transient Sprite sprite;
-	private transient TravelQueue walkingQueue;
-	private transient LocalEntityList localEntities;
 	private transient ChatMessage lastChatMessage;
 	private transient Map<String, Object> temporaryAttributes;
 	private Settings settings;
@@ -100,15 +97,6 @@ public class Player implements Commander {
 			return updateFlags;
 		}
 
-		public Sprite getSprites() {
-			return sprite;
-		}
-
-		public TravelQueue getWalkingQueue() {
-			return walkingQueue;
-		}
-
-	
 		public boolean isDisconnected() {
 			return connection.stopped;
 		}

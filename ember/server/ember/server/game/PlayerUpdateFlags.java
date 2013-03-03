@@ -7,52 +7,18 @@ package ember.server.game;
  */
 public class PlayerUpdateFlags {
 
-    private Location lastRegion;
-    private boolean faceToUpdateRequired = false, forceTextUpdateRequired = false, appearanceUpdateRequired = true, chatTextUpdateRequired = false, animationUpdateRequired = false, graphicsUpdateRequired = false, hitUpdateRequired = false, hit2UpdateRequired = false;
-    private boolean didTeleport = true, didMapRegionChange = false;
-    private boolean clearFaceTo = false;
 
-    private int faceTo = -1;
+    private boolean forceTextUpdateRequired = false, appearanceUpdateRequired = true, chatTextUpdateRequired = false, animationUpdateRequired = false, graphicsUpdateRequired = false, hitUpdateRequired = false, hit2UpdateRequired = false;
 
-    public boolean isClearFaceTo() {
-        return clearFaceTo;
-    }
-
-    public Location getLastRegion() {
-        return lastRegion;
-    }
-
-    public void setLastRegion(Location lastRegion) {
-        this.lastRegion = lastRegion;
-    }
 
     public boolean isUpdateRequired() {
-        return faceToUpdateRequired || appearanceUpdateRequired || chatTextUpdateRequired || animationUpdateRequired || graphicsUpdateRequired || hitUpdateRequired || hit2UpdateRequired;
+        return appearanceUpdateRequired || chatTextUpdateRequired || animationUpdateRequired || graphicsUpdateRequired || hitUpdateRequired || hit2UpdateRequired;
     }
 
-    public void setFaceToUpdateRequired(boolean b) {
-        faceToUpdateRequired = b;
-    }
 
-    public void setFaceToUpdateRequired(boolean b, int i) {
-        faceToUpdateRequired = b;
-        faceTo = i;
-    }
-
-    public boolean isFaceToUpdateRequired() {
-        return faceToUpdateRequired;
-    }
-
-    public int getFaceTo() {
-        return faceTo;
-    }
 
     public void clear() {
-        faceTo = -1;
-        faceToUpdateRequired = false;
         appearanceUpdateRequired = false;
-        didTeleport = false;
-        didMapRegionChange = false;
         chatTextUpdateRequired = false;
         animationUpdateRequired = false;
         graphicsUpdateRequired = false;
@@ -72,21 +38,6 @@ public class PlayerUpdateFlags {
         this.graphicsUpdateRequired = b;
     }
 
-    public boolean didTeleport() {
-        return didTeleport;
-    }
-
-    public boolean didMapRegionChange() {
-        return didMapRegionChange;
-    }
-
-    public void setDidMapRegionChange(boolean didMapRegionChange) {
-        this.didMapRegionChange = didMapRegionChange;
-    }
-
-    public void setDidTeleport(boolean didTeleport) {
-        this.didTeleport = didTeleport;
-    }
 
     public void setAppearanceUpdateRequired(boolean b) {
         appearanceUpdateRequired = b;
@@ -122,10 +73,6 @@ public class PlayerUpdateFlags {
 
     public boolean isHit2UpdateRequired() {
         return this.hit2UpdateRequired;
-    }
-
-    public void setClearFaceTo(boolean b) {
-        this.clearFaceTo = b;
     }
 
     public void setForceTextUpdateRequired(boolean b) {
