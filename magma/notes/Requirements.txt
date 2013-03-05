@@ -1,0 +1,6 @@
+Must currently support
+Non-power-of-2 textures
+PS/VS 2+
+FBO
+HDR (32F FBO texture?)
+v150 shader - need matrix invert4 function and to check matrix mults before - to lower requirements of illum and increase its speed.

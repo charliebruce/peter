@@ -1,8 +1,0 @@
-Security improvements and notes:
-
-For stream algorithm the first data sent must be random to prevent guessing the key. 
-The client should, in the RSA block, specify X packets to disregard and then send them. 
-
-Authoritative commands (update, offline etc) by RSA?
-Serv->isaac seed enc with pubkey. Target decrypts and sends OK enc with isaac seed.
-Server only accepts if OK returned, else kicks, logs, warns. 

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="server"/>
+	<classpathentry excluding="magma/client/graphics/opengl/OldRendererCode.java|magma/client/graphics/opengl/RendererGL3.java|magma/client/graphics/opengl/RendererGL4.java" kind="src" path="client"/>
+	<classpathentry kind="src" path="engine"/>
+	<classpathentry kind="src" path="editor"/>
+	<classpathentry kind="src" path="misc"/>
+	<classpathentry excluding="shader/" kind="src" path="tools"/>
+	<classpathentry kind="src" path="hwprofiler"/>
+	<classpathentry kind="src" path="objimp"/>
+	<classpathentry kind="src" path="joal-demos"/>
+	<classpathentry kind="src" path="jarnbjo"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/jre7"/>
+	<classpathentry kind="lib" path="jar/gluegen-gl.jar"/>
+	<classpathentry kind="lib" path="jar/gluegen-rt-natives-windows-amd64.jar"/>
+	<classpathentry kind="lib" path="jar/gluegen-rt.jar"/>
+	<classpathentry kind="lib" path="jar/jogl-natives-windows-amd64.jar"/>
+	<classpathentry kind="lib" path="jar/jogl.all.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="jar:platform:/resource/magma/javadoc/jogl-javadoc.zip!/jogl/javadoc"/>
+			<attribute name="org.eclipse.jdt.launching.CLASSPATH_ATTR_LIBRARY_PATH_ENTRY" value="magma/lib"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="jar/nativewindow-natives-windows-amd64.jar"/>
+	<classpathentry kind="lib" path="jar/nativewindow.all-noawt.jar"/>
+	<classpathentry kind="lib" path="jar/nativewindow.all.jar">
+		<attributes>
+			<attribute name="javadoc_location" value="jar:platform:/resource/magma/javadoc/jogl-javadoc.zip!/jogl/javadoc_nativewindow_spec"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="jar/nativewindow.awt.jar"/>
+	<classpathentry kind="lib" path="jar/nativewindow.core.jar"/>
+	<classpathentry kind="lib" path="jar/nativewindow.os.win.jar"/>
+	<classpathentry kind="lib" path="jar/nativewindow.os.x11.jar"/>
+	<classpathentry kind="lib" path="jar/newt-natives-windows-amd64.jar">
+		<attributes>
+			<attribute name="org.eclipse.jdt.launching.CLASSPATH_ATTR_LIBRARY_PATH_ENTRY" value="magma/lib/winx64"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="jar/newt.all-noawt.jar"/>
+	<classpathentry kind="lib" path="jar/newt.all.jar"/>
+	<classpathentry kind="lib" path="jar/newt.awt.jar"/>
+	<classpathentry kind="lib" path="jar/newt.core.jar"/>
+	<classpathentry kind="lib" path="jar/newt.event.jar"/>
+	<classpathentry kind="lib" path="jar/newt.hw.broadcomegl.jar"/>
+	<classpathentry kind="lib" path="jar/newt.hw.intelgdl.jar"/>
+	<classpathentry kind="lib" path="jar/newt.ogl.jar"/>
+	<classpathentry kind="lib" path="jar/newt.os.osx.jar"/>
+	<classpathentry kind="lib" path="jar/newt.os.win.jar"/>
+	<classpathentry kind="lib" path="jar/newt.os.x11.jar"/>
+	<classpathentry kind="lib" path="jar/mysql-connector-java-5.1.17-bin.jar"/>
+	<classpathentry kind="lib" path="jar/jna.jar"/>
+	<classpathentry kind="lib" path="jar/joal.jar">
+		<attributes>
+			<attribute name="org.eclipse.jdt.launching.CLASSPATH_ATTR_LIBRARY_PATH_ENTRY" value="magma/lib/winx86"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="lib" path="jar/joal-natives-windows-i586.jar">
+		<attributes>
+			<attribute name="org.eclipse.jdt.launching.CLASSPATH_ATTR_LIBRARY_PATH_ENTRY" value="magma/lib/windows-i586"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

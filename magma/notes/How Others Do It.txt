@@ -1,0 +1,35 @@
+http://www.moddb.com/games/half-life-2/tutorials/bump-mapping-in-source
+
+http://www.gamedev.net/page/resources/_/reference/programming/special-effects/water/realistic-natural-effect-rendering-water-i-r2138
+
+http://www.joystiq.com/screenshots/crysis-2-directx-11/4254801/#/7
+http://www.mycrysis.com/sites/default/files/support/download/c2_dx11_ultra_upgrade.pdf
+
+
+
+
+http://zigguratvertigo.com/2011/03/07/gdc-2011-approximating-translucency-for-a-fast-cheap-and-convincing-subsurface-scattering-look/
+
+To transform the normal to eye space we will use the pre-defined uniform variable mat3 gl_NormalMatrix. This matrix is the transpose of the inverse of the 3×3 upper left sub matrix from the modelview matrix. We will do the normal transformation per vertex. T
+
+Optimization: Stencil Cull Two pass algorithm, but first pass is very cheap Rendering without color writes = 2x pixels per clock 1.Render light volume with color write disabled Depth Func = LESS, Stencil Func = ALWAYS
+Stencil Z-FAIL = REPLACE (with value X)
+Rest of stencil ops set to KEEP
+2.Render with lighting shader Depth Func = ALWAY, Stencil Func = EQUAL, all ops = KEEP, Stencil Ref = X Unlit pixels will be culled because stencil will not match the reference value
+
+
+
+
+
+
+
+
+Bokeh blur dof! gorgheous
+
+That's how Bokeh works in Unreal / Unity / CryEngine 3 / Just Cause 2 or any other game with the effect. Creates a quad for each emissive out of focus area and applies the Bokeh sprite with an average colour sample.
+
+Garry is working on a SuperDOF Bokeh system, which could be used along with a script to make SuperDOF render every frame. 
+
+
+For each screen pixel, we render a quad/sprite. This sprite size is scaled based on a factor of how much of the pixel is in focus or out of focus (commonly denominated as Circle of Confusion). Such sprites can also feature a mask approximating the camera aperture shape.
+Unfortunately, the graphics hardware is still a few years away from being able to efficiently use such techniques at full screen resolution. Thus, this implementation is done at half resolution and includes a number of additional optimizations. One of the main advantages of this approach is the ability for arbitrary large defocus amount, without under sampling.

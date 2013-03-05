@@ -1,0 +1,922 @@
+/*******************************************************************************
+**3456789 123456789 123456789 123456789 123456789 123456789 123456789 123456789 
+**      10        20        30        40        50        60        70        80
+**
+** program:
+**    gl-gst-test
+**
+** author:
+**    Mirco "MacSlow" Mueller <macslow@bangang.de>
+**
+** created:
+**    10.5.2006
+**
+** last change:
+**    13.5.2006
+**
+** notes:
+**    Compile it. Start it from the commandline and make sure to pass a H.264
+**    encoded quicktime clip to it. The pipeline I use _only_ works with those.
+**    The audio-track is ignored so don't be surprised if you don't hear
+**    anything. Some hint on available controls...
+**
+**        p - pause/unpause playback
+**        s - stop playback and kill pipeline
+**        esc - exit program
+**        up - increase distance between planes
+**        down - decrease distance between planes
+**        wheel up - decrease alpha of planes
+**        wheel down - increase alpha of planes
+**        LMB-drag - rotate planes around
+**        RMB-drag - move planes back and forth
+**
+**    This is test-code to learn things about gstreamer and how to use it in
+**    combination with OpenGL. I'm aware of its shortcomings like...
+**
+**        - conversion to RGB done via pad-filter (slow), should be done with
+**        fragment-shader (fast)… too lazy right now
+**
+**        - too much hardcoded values, way too many globals… but hey it’s
+**        try-stuff-time
+**
+**        - superfluous copy of decoded video-frame to main-thread-local memory,
+**        no clue how to avoid that yet
+**
+** how to compile:
+**    gcc -Wall -g `pkg-config --cflags --libs gthread-2.0 gtkglext-1.0 \
+**    gstreamer-0.10` gl-gst-test.c -o gl-gst-test
+**
+** what you need to compile:
+**    The whole set of development files for...
+**
+**        Xorg 7.0 (including the Render-extension)
+**        activated desktop-compositing (e.g. xcompmgr or compiz)
+**        OpenGL (obviously from nvidia)
+**        gtk+ 2.8.x
+**        gstreamer 0.10 (and all those plugins)
+**        x264
+**
+** license:
+**    LGPL
+**
+** warranty/disclaimer:
+**    This code is provided "as is" take it or leave it. It is unsupported! It
+**    works for me but might not work for you. While I tried my best to keep it
+**    sane and save I cannot be held responsible if compiling/runnings this code
+**    will cause your pants to catch fire, your kitten dying a horrible death or
+**    else. Use it at your own risk! You have been warned!
+**
+*******************************************************************************/
+
+#include <string.h>
+#include <stdlib.h>
+#include <glib.h>
+#include <glib/gprintf.h>
+#include <gdk/gdkkeysyms.h>
+#include <gtk/gtk.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
+#include <gtk/gtkgl.h>
+#include <gst/gst.h>
+
+#define FOVY_2 20.0
+#define Z_NEAR 3.0
+
+GLfloat			g_afAngle[3] = {0.0f, 0.0f, 0.0f};
+GLfloat			g_fDistance = -1.4f;
+gint			g_iFrames = 0;
+GTimer*			g_pTimerId = NULL;
+gboolean		g_bKeepRunning = TRUE;
+gdouble			g_fLastTimeStamp = 0.0f;
+gdouble			g_fCurrentTimeStamp = 0.0f;
+gdouble			g_fLastFullSecond = 0.0f;
+gboolean		g_bLMBPressed = FALSE;
+gboolean		g_bRMBPressed = FALSE;
+GLuint			g_uiColorBuffer;
+gdouble			g_fCurrentX;
+gdouble			g_fCurrentY;
+gdouble			g_fDeltaX;
+gdouble			g_fDeltaY;
+gdouble			g_fLastX;
+gdouble			g_fLastY;
+gint			g_iWidth = 1;
+gint			g_iHeight = 1;
+GstElement*		g_pPipeline = NULL;
+GstElement*		pVideo = NULL;
+GstElement*		g_pPipelineH264 = NULL;
+GstElement*		pVideoH264 = NULL;
+gboolean		g_bInitialized = FALSE;
+gchar*			g_pcFrameBuffer = NULL;
+GMutex*			g_pFrameBufferMutex = NULL;
+GLfloat			g_afAlpha = 1.0f;
+GLfloat			g_fMovieAspect = 1.0f;
+GLuint			g_uiDisplayList = 0;
+GLfloat			g_fOffset = 0.5f;
+
+gint get_pad_width (GstPad* pVideoPad)
+{
+	gint iWidth = 0;
+	GstCaps* pCaps = NULL;
+	GstStructure* pStructure = NULL;
+
+	pCaps = gst_pad_get_negotiated_caps (pVideoPad);
+	if (pCaps)
+	{
+		pStructure = gst_caps_get_structure (pCaps, 0);
+		gst_structure_get_int (pStructure, "width", &iWidth);
+	}
+	else
+		g_print ("gst_pad_width() - Could not get caps for the pad!\n");
+
+	return iWidth;
+}
+
+gint get_pad_height (GstPad* pVideoPad)
+{
+	gint iHeight = 0;
+	GstCaps* pCaps = NULL;
+	GstStructure* pStructure = NULL;
+
+	pCaps = gst_pad_get_negotiated_caps (pVideoPad);
+	if (pCaps)
+	{
+		pStructure = gst_caps_get_structure (pCaps, 0);
+		gst_structure_get_int (pStructure, "height", &iHeight);
+	}
+	else
+		g_print ("gst_pad_height() - Could not get caps for the pad!\n");
+
+	return iHeight;
+}
+
+gdouble get_pad_fps (GstPad* pVideoPad)
+{
+	gint aiFps[2] = {0, 0};
+	GstCaps* pCaps = NULL;
+	GstStructure* pStructure = NULL;
+	gdouble fFpsRate = 0.0f;
+
+	pCaps = gst_pad_get_negotiated_caps (pVideoPad);
+	if (pCaps)
+	{
+		pStructure = gst_caps_get_structure (pCaps, 0);
+		gst_structure_get_fraction (pStructure,
+									"framerate",
+									&aiFps[0],
+									&aiFps[1]);
+		fFpsRate = (gdouble) aiFps[0] / (gdouble) aiFps[1];
+	}
+	else
+		g_print ("gst_pad_fps() - Could not get caps for the pad!\n");
+
+	return fFpsRate;
+}
+
+gdouble get_pad_movie_aspect (GstPad* pVideoPad)
+{
+	gint iWidth = 0;
+	gint iHeight = 0;
+	gint aiPixelAspect[2] = {0, 0};
+	gdouble fAspectRatio = 0.0f;
+	GstCaps* pCaps = NULL;
+	GstStructure* pStructure = NULL;
+
+	pCaps = gst_pad_get_negotiated_caps (pVideoPad);
+	if (pCaps)
+	{
+		pStructure = gst_caps_get_structure (pCaps, 0);
+		gst_structure_get_int (pStructure, "width", &iWidth);
+		gst_structure_get_int (pStructure, "height", &iHeight);
+		gst_structure_get_fraction (pStructure,
+									"pixel-aspect-ratio",
+									&aiPixelAspect[0],
+									&aiPixelAspect[1]);
+
+		if (aiPixelAspect[0] == 0)
+			fAspectRatio = (gdouble) iWidth / (gdouble) g_iHeight;
+		else
+		{
+			fAspectRatio = (gdouble) aiPixelAspect[0] /
+						   (gdouble) aiPixelAspect[1] *
+						   (gdouble) iWidth /
+						   (gdouble) iHeight;
+		}
+	}
+	else
+		g_print ("get_pad_movie_aspect() - Could not get caps for the pad!\n");
+
+	return fAspectRatio;
+}
+
+gint64 get_pipeline_current_position (GstElement* pPipeline)
+{
+	GstFormat fmt = GST_FORMAT_TIME;
+	gint64 iPosition = 0L;
+
+	gst_element_query_position (pPipeline, &fmt, &iPosition);
+
+	return iPosition;
+}
+
+gint64 get_pipeline_total_duration (GstElement* pPipeline)
+{
+	GstFormat fmt = GST_FORMAT_TIME;
+	gint64 iLength = 0L;
+
+	gst_element_query_duration (pPipeline, &fmt, &iLength);
+
+	return iLength;
+}
+
+void seek_to_time (GstElement* pPipeline,
+				   gint64 time_nanoseconds)
+{
+	if (!gst_element_seek (pPipeline,
+						   1.0,
+						   GST_FORMAT_TIME,
+						   GST_SEEK_FLAG_FLUSH,
+						   GST_SEEK_TYPE_SET,
+						   time_nanoseconds,
+						   GST_SEEK_TYPE_NONE,
+						   GST_CLOCK_TIME_NONE))
+	{
+		g_print ("Seek failed!\n");
+	}
+}
+
+gboolean end_func (GtkWidget* pWidget,
+				   GdkEvent* pEvent,
+				   gpointer data)
+{
+	gtk_main_quit ();
+	return TRUE;
+}
+
+void on_screen_changed (GtkWidget* pWidget,
+						GdkScreen* pOldScreen,
+						gpointer data)
+{                       
+	GdkScreen* pScreen = gtk_widget_get_screen (pWidget);
+	GdkColormap* pColormap = gdk_screen_get_rgba_colormap (pScreen);
+
+	if (!pColormap)
+		pColormap = gdk_screen_get_rgb_colormap (pScreen);
+
+	gtk_widget_set_colormap (pWidget, pColormap);
+}
+
+gboolean draw_handler (GtkWidget* pWidget)
+{
+	static gboolean bNeedsRedraw = FALSE;
+
+	/*if (!g_bLMBPressed)
+	{
+		g_afAngle[0] += 2.1f;
+		g_afAngle[1] -= 1.6f;
+		g_afAngle[2] += 1.1f;
+		bNeedsRedraw = TRUE;
+	}*/
+
+	if (g_bInitialized && g_mutex_trylock (g_pFrameBufferMutex))
+	{
+		glBindTexture (GL_TEXTURE_RECTANGLE_ARB, g_uiColorBuffer);
+		glTexImage2D (GL_TEXTURE_RECTANGLE_ARB,
+					  0,
+					  GL_RGB,
+					  g_iWidth,
+					  g_iHeight,
+					  0,
+					  GL_RGB,
+					  GL_UNSIGNED_BYTE,
+					  g_pcFrameBuffer);
+		g_mutex_unlock (g_pFrameBufferMutex);
+		bNeedsRedraw = TRUE;
+	}
+
+	if (bNeedsRedraw)
+		gtk_widget_queue_draw (pWidget);
+
+	return TRUE;
+}
+
+void realize (GtkWidget* pWidget, gpointer data)
+{
+	GdkGLContext* pGlContext = gtk_widget_get_gl_context (pWidget);
+	GdkGLDrawable* pGlDrawable = gtk_widget_get_gl_drawable (pWidget);
+
+	if (!gdk_gl_drawable_gl_begin (pGlDrawable, pGlContext))
+		return;
+
+    glEnable (GL_BLEND);
+	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	glColor4f (0.0f, 0.0f, 0.0f, 0.0f);
+	glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
+	glClearDepth (1.0f);
+	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+
+	g_print ("OpenGL version: %s\n", glGetString (GL_VERSION));
+	g_print ("OpenGL vendor: %s\n", glGetString (GL_VENDOR));
+	g_print ("OpenGL renderer: %s\n", glGetString (GL_RENDERER));
+
+	gdk_gl_drawable_gl_end (pGlDrawable);
+}
+
+gboolean configure_event (GtkWidget* pWidget,
+						  GdkEventConfigure* pEvent,
+						  gpointer data)
+{
+	GdkGLContext* pGlContext = gtk_widget_get_gl_context (pWidget);
+	GdkGLDrawable* pGlDrawable = gtk_widget_get_gl_drawable (pWidget);
+	GLsizei w = pWidget->allocation.width;
+	GLsizei h = pWidget->allocation.height;
+
+	if (!gdk_gl_drawable_gl_begin (pGlDrawable, pGlContext))
+		return FALSE;
+
+	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glViewport (0, 0, w, h);
+
+	glMatrixMode (GL_PROJECTION);
+	glLoadIdentity ();
+	gluPerspective (2.0f * FOVY_2, (GLfloat) w / (GLfloat) h, 0.1f, 50.0f);
+
+	glMatrixMode (GL_MODELVIEW);
+	glLoadIdentity ();
+	gluLookAt (0.0f, 0.0f, Z_NEAR,
+			   0.0f, 0.0f, 0.0f,
+			   0.0f, 1.0f, 0.0f);
+	glTranslatef (0.0f, 0.0f, -Z_NEAR);
+	glEnable (GL_DEPTH_TEST);
+	glEnable (GL_TEXTURE_RECTANGLE_ARB);
+	glLineWidth (1.0f);
+
+	glEnable (GL_LIGHTING);
+	glEnable (GL_LIGHT0);
+	glPolygonMode (GL_BACK, GL_FILL);
+	glPolygonMode (GL_FRONT, GL_FILL);
+	glDisable (GL_CULL_FACE);
+	glLightModelf (GL_LIGHT_MODEL_TWO_SIDE, 1.0f);
+
+	glEnable (GL_LINE_SMOOTH);
+	glHint (GL_LINE_SMOOTH_HINT, GL_NICEST);
+	glTexEnvi (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	glTexParameteri (GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri (GL_TEXTURE_RECTANGLE_ARB, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glGenTextures (1, &g_uiColorBuffer);
+	glBindTexture (GL_TEXTURE_RECTANGLE_ARB, g_uiColorBuffer);
+	glTexImage2D (GL_TEXTURE_RECTANGLE_ARB,
+				  0,
+				  GL_RGB,
+				  g_iWidth,
+				  g_iHeight,
+				  0,
+				  GL_RGB,
+				  GL_UNSIGNED_BYTE,
+				  NULL);
+
+	g_uiDisplayList = glGenLists (1);
+
+	gdk_gl_drawable_gl_end (pGlDrawable);
+
+	return TRUE;
+}
+
+static gboolean expose_event(GtkWidget* pWidget,
+							 GdkEventExpose* pEvent,
+							 gpointer data)
+{
+	GdkGLContext* pGlContext = gtk_widget_get_gl_context (pWidget);
+	GdkGLDrawable* pGlDrawable = gtk_widget_get_gl_drawable (pWidget);
+	GLfloat afMatDiffuseFront[4] = {1.0f * g_afAlpha, 1.0f * g_afAlpha, 1.0f * g_afAlpha, g_afAlpha};
+	GLfloat afMatDiffuseBack[4] = {0.0f * g_afAlpha, 0.0f * g_afAlpha, 0.0f * g_afAlpha, g_afAlpha};
+	GLfloat afVector[3];
+	GLfloat afMatrixBase[16];
+	gulong ulMilliSeconds = 0L;
+	gdouble fFrameTimeDelta = 0.0f;
+	gdouble fFullSecond = 0.0f;
+
+	if (!gdk_gl_drawable_gl_begin (pGlDrawable, pGlContext))
+		return FALSE;
+
+	glTranslatef (0.0f, 0.0f, g_fDistance);
+
+	glPushMatrix ();
+	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glGetFloatv (GL_MODELVIEW_MATRIX, afMatrixBase);
+	afVector[0] = afMatrixBase[0];
+	afVector[1] = afMatrixBase[4];
+	afVector[2] = afMatrixBase[8];
+	glRotatef (g_afAngle[1] * 0.5f, afVector[0], afVector[1], afVector[2]);
+	afVector[0] = afMatrixBase[1];
+	afVector[1] = afMatrixBase[5];
+	afVector[2] = afMatrixBase[9];
+	glRotatef (g_afAngle[0] * 0.5f, afVector[0], afVector[1], afVector[2]);
+
+	/*g_afAngle[0] = g_afAngle[1] = g_afAngle[2] = g_fDistance = 0.0f;*/
+	g_fDistance = 0.0f;
+
+	glEnable (GL_TEXTURE_RECTANGLE_ARB);
+	glBindTexture (GL_TEXTURE_RECTANGLE_ARB, g_uiColorBuffer);
+	glMaterialfv (GL_FRONT, GL_DIFFUSE, afMatDiffuseFront);
+	glMaterialfv (GL_BACK, GL_DIFFUSE, afMatDiffuseBack);
+
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+	glTranslatef (0.0f, 0.0f, g_fOffset);
+	glCallList (g_uiDisplayList);
+
+	glPopMatrix ();
+
+	if (gdk_gl_drawable_is_double_buffered (pGlDrawable))
+		gdk_gl_drawable_swap_buffers (pGlDrawable);
+	else
+		glFlush ();
+
+	gdk_gl_drawable_gl_end (pGlDrawable);
+
+	g_fCurrentTimeStamp = g_timer_elapsed (g_pTimerId, &ulMilliSeconds);
+	fFrameTimeDelta = g_fCurrentTimeStamp - g_fLastTimeStamp;
+	fFullSecond = g_fCurrentTimeStamp - g_fLastFullSecond;
+
+	if (fFullSecond < 1.0f)
+		g_iFrames++;
+	else
+	{
+		g_print ("fps: %d, last frame-time: %f\n", g_iFrames, fFrameTimeDelta);
+		g_iFrames = 0;
+		g_fLastFullSecond = g_fCurrentTimeStamp;
+	}
+
+	g_fLastTimeStamp = g_fCurrentTimeStamp;
+
+	return TRUE;
+}
+
+gboolean key_press_handler (GtkWidget* pWidget,
+							GdkEventKey* pEvent,
+							GMainLoop* pLoop)
+{
+	static gboolean bPlaying = TRUE;
+
+	if (pEvent->type == GDK_KEY_PRESS)
+	{
+		switch (pEvent->keyval)
+		{
+			case GDK_q :
+			case GDK_Escape :
+				end_func (pWidget, NULL, NULL);
+			break;
+
+			case GDK_p :
+				if (bPlaying)
+				{
+					gst_element_set_state (g_pPipelineH264, GST_STATE_PAUSED);
+					g_print ("pipeline paused\n");
+					bPlaying = FALSE;
+				}
+				else
+				{
+					gst_element_set_state (g_pPipelineH264, GST_STATE_PLAYING);
+					g_print ("pipeline playing\n");
+					bPlaying = TRUE;
+				}
+			break;
+
+			case GDK_s :
+				g_main_loop_quit (pLoop);
+				g_print ("stopping playback\n");
+				gst_element_set_state (g_pPipelineH264, GST_STATE_NULL);
+				g_print ("deleting pipeline\n");
+				gst_object_unref (GST_OBJECT (g_pPipelineH264));
+				pLoop = NULL;
+				g_pPipelineH264 = NULL;
+			break;
+
+			case GDK_Up :
+				g_fOffset += 0.1f;
+			break;
+
+			case GDK_Down :
+				g_fOffset -= 0.1f;
+			break;
+
+			default :
+			break;
+		}
+	}
+
+	return TRUE;
+}
+
+gboolean button_handler (GtkWidget* pWidget,
+						 GdkEventButton* pEvent,
+						 gpointer data)
+{
+	switch (pEvent->button)
+	{
+		case 1:
+			if (pEvent->type == GDK_BUTTON_PRESS)
+			{
+				g_fCurrentX = pEvent->x;
+				g_fCurrentY = pEvent->y;
+				g_fLastX = g_fCurrentX;
+				g_fLastY = g_fCurrentY;
+				g_bLMBPressed = TRUE;
+			}
+			else if (pEvent->type == GDK_BUTTON_RELEASE)
+				g_bLMBPressed = FALSE;
+		break;
+
+		case 3:
+			if (pEvent->type == GDK_BUTTON_PRESS)
+			{
+				g_fCurrentX = pEvent->x;
+				g_fCurrentY = pEvent->y;
+				g_fLastX = g_fCurrentX;
+				g_fLastY = g_fCurrentY;
+				g_bRMBPressed = TRUE;
+			}
+			else if (pEvent->type == GDK_BUTTON_RELEASE)
+				g_bRMBPressed = FALSE;
+		break;
+	}
+
+	return TRUE;
+}
+
+gboolean scroll_handler (GtkWidget* pWidget,
+						 GdkEventScroll* pEvent,
+						 gpointer data)
+{
+	switch (pEvent->direction)
+	{
+		case GDK_SCROLL_UP:
+			if (g_afAlpha < 1.0f)
+				g_afAlpha += 0.05f;
+		break;
+
+		case GDK_SCROLL_DOWN:
+			if (g_afAlpha > 0.0f)
+				g_afAlpha -= 0.05f;
+		break;
+
+		/* just silence gcc */
+		default:
+		break;
+	}
+
+	return TRUE;
+}
+
+gboolean motion_handler (GtkWidget* pWidget,
+						 GdkEventMotion *pEvent,
+						 gpointer data)
+{
+	if (g_bLMBPressed)
+	{
+		g_fCurrentX = pEvent->x;
+		g_fCurrentY = pEvent->y;
+		g_fDeltaX = g_fLastX - g_fCurrentX;
+		g_fDeltaY = g_fLastY - g_fCurrentY;
+		g_fLastX = g_fCurrentX;
+		g_fLastY = g_fCurrentY;
+
+		g_afAngle[0] -= g_fDeltaX;
+		g_afAngle[1] -= g_fDeltaY;
+		gtk_widget_queue_draw (pWidget);
+	}
+
+	if (g_bRMBPressed)
+	{
+		g_fCurrentY = pEvent->y;
+		g_fDeltaY = g_fLastY - g_fCurrentY;
+		g_fLastY = g_fCurrentY;
+
+		g_fDistance -= g_fDeltaY / 100.0f;
+		gtk_widget_queue_draw (pWidget);
+	}
+
+	return TRUE;
+}
+
+static gboolean bus_call (GstBus* pBus,
+						  GstMessage* pMessage,
+						  gpointer data)
+{
+	GMainLoop* pLoop = data;
+
+	switch (GST_MESSAGE_TYPE (pMessage))
+	{
+		case GST_MESSAGE_EOS:
+			g_print ("End-of-stream\n");
+			g_main_loop_quit (pLoop);
+		break;
+
+		case GST_MESSAGE_ERROR:
+		{
+			gchar* pcDebug = NULL;
+			GError* pError = NULL;
+
+			gst_message_parse_error (pMessage, &pError, &pcDebug);
+			g_free (pcDebug);
+
+			g_print ("Error: %s\n", pError->message);
+			g_error_free (pError);
+
+			g_main_loop_quit (pLoop);
+			break;
+		}
+
+		default:
+		break;
+	}
+
+	return TRUE;
+}
+
+static void on_pad_added (GstElement* pDemuxer,
+						  GstPad* pPad,
+						  GstElement* pDecoder)
+{
+	gchar* pcName = NULL;
+
+	pcName = gst_pad_get_name (pPad);
+
+	if (!g_ascii_strncasecmp (pcName, "video", 5))
+		if (!gst_element_link_pads (pDemuxer, pcName, pDecoder, "sink"))
+			g_print ("could not link demuxer with decoder\n");
+
+	g_free (pcName);
+}
+
+static void on_handoff (GstElement* pFakeSink,
+						GstBuffer* pBuffer,
+						GstPad* pPad,
+						GtkWidget* pWidget)
+{
+	g_iWidth = get_pad_width (pPad);
+	g_iHeight = get_pad_height (pPad);
+	g_fMovieAspect = get_pad_movie_aspect (pPad);
+
+	if (g_bInitialized)
+	{
+		gst_buffer_ref (pBuffer);
+		g_mutex_lock (g_pFrameBufferMutex);
+		g_memmove (g_pcFrameBuffer,
+				   GST_BUFFER_DATA (pBuffer),
+				   g_iWidth * g_iHeight * 3);
+		g_mutex_unlock (g_pFrameBufferMutex);
+		gst_buffer_unref (pBuffer);
+	}
+}
+
+gboolean spit_out_clip_stats (GstPad* pVideoPad)
+{
+	GLfloat afTexCoords[2] = {(GLfloat) g_iWidth, (GLfloat) g_iHeight};
+
+	g_print ("The video is %dx%d at %6.3f fps, movie-aspect is %3.2f:1",
+			 get_pad_width (pVideoPad),
+			 get_pad_height (pVideoPad),
+			 get_pad_fps (pVideoPad),
+			 get_pad_movie_aspect (pVideoPad));
+
+	g_mutex_lock (g_pFrameBufferMutex);
+	g_pcFrameBuffer = g_malloc0 (g_iWidth * g_iHeight * 3);
+	if (g_pcFrameBuffer)
+		g_bInitialized = TRUE;
+	g_mutex_unlock (g_pFrameBufferMutex);
+
+	if (g_uiDisplayList)
+	{
+		glNewList (g_uiDisplayList, GL_COMPILE);
+		glBegin (GL_QUADS);
+		glNormal3f (0.0f, 0.0f, 1.0f);
+		glTexCoord2f (afTexCoords[0], 0.0f);
+		glVertex3f (g_fMovieAspect, 1.0f, 0.0f);
+		glTexCoord2f (0.0f, 0.0f);
+		glVertex3f (-g_fMovieAspect, 1.0f, 0.0f);
+		glTexCoord2f (0.0f, afTexCoords[1]);
+		glVertex3f (-g_fMovieAspect, -1.0f, 0.0f);
+		glTexCoord2f (afTexCoords[0], afTexCoords[1]);
+		glVertex3f (g_fMovieAspect, -1.0f, 0.0f);
+		glEnd ();
+		glEndList ();
+	}
+	else
+		g_print ("configure_event() - Crap, no display-list was generated!\n");
+
+	/* remove callback after the first call */
+	return FALSE;
+}
+
+gboolean build_pipeline (gchar* pcFilename,
+						 GMainLoop** pLoopH264,
+						 GstElement** pPipelineH264,
+						 GstBusFunc busCallbackFunc,
+						 GCallback padAddedFunc,
+						 GstPad** pVideoPadH264,
+						 GCallback handoffHandlerFunc,
+						 gpointer pDrawingArea)
+{
+	GstElement* pSourceH264 = NULL;
+	GstElement* pDemuxerH264 = NULL;
+	GstElement* pDecoderH264 = NULL;
+	GstElement* pVideoConverterH264  = NULL;
+	GstElement* pVideoSinkH264 = NULL;
+
+	*pLoopH264 = g_main_loop_new (NULL, FALSE);
+	*pPipelineH264 = gst_pipeline_new ("pipeline-h264");
+	gst_bus_add_watch (gst_pipeline_get_bus (GST_PIPELINE (*pPipelineH264)),
+					   busCallbackFunc,
+					   *pLoopH264);
+	pSourceH264 = gst_element_factory_make ("filesrc", "source-h264");
+	g_object_set (G_OBJECT (pSourceH264), "location", pcFilename, NULL);
+	pDemuxerH264 = gst_element_factory_make ("qtdemux", "demuxer-h264");
+	pDecoderH264 = gst_element_factory_make ("ffdec_h264", "decoder-h264");
+	gst_bin_add_many (GST_BIN (*pPipelineH264), pSourceH264, pDemuxerH264, pDecoderH264, NULL);
+	if (!gst_element_link_pads (pSourceH264, "src", pDemuxerH264, "sink"))
+		g_print ("build_pipeline() - could not link filesrc with qtdemux\n");
+	g_signal_connect (pDemuxerH264, "pad-added", padAddedFunc, pDecoderH264);
+	pVideoH264 = gst_bin_new ("videobin-h264");
+	pVideoConverterH264 = gst_element_factory_make ("ffmpegcolorspace", "vconv");
+	*pVideoPadH264 = gst_element_get_pad (pVideoConverterH264, "sink");
+	pVideoSinkH264 = gst_element_factory_make ("fakesink", "sink-h264");
+	g_object_set (G_OBJECT (pVideoSinkH264), "sync", TRUE, "signal-handoffs", TRUE, NULL);
+	g_signal_connect (pVideoSinkH264, "handoff", handoffHandlerFunc, pDrawingArea);
+	gst_bin_add_many (GST_BIN (pVideoH264), pVideoConverterH264, pVideoSinkH264, NULL);
+	gst_element_link_filtered (pVideoConverterH264, pVideoSinkH264, gst_caps_new_simple ("video/x-raw-rgb", NULL));
+	gst_element_add_pad (pVideoH264, gst_ghost_pad_new ("sink", *pVideoPadH264));
+	gst_object_unref (*pVideoPadH264);
+	gst_bin_add (GST_BIN (*pPipelineH264), pVideoH264);
+	if (!gst_element_link_pads (pDecoderH264, "src", pVideoH264, "sink"))
+		g_print ("build_pipeline() - could not link ffdec_h264 with ffmpegcolorspace\n");
+
+	return TRUE;
+}
+
+int main (int argc, char** argv)
+{
+	GtkWidget* pWindow = NULL;
+	GdkGLConfig* pGlConfig = NULL;
+	GtkWidget* pDrawingArea = NULL;
+	guint uiDrawHandlerId = 0;
+	gint iWidth;
+	gint iHeight;
+	GMainLoop* pLoopH264 = NULL;
+	GstPad* pVideoPadH264 = NULL;
+
+	g_thread_init (NULL);
+	gtk_init (&argc,&argv);
+	gtk_gl_init (&argc,&argv);
+	gst_init (&argc, &argv);
+
+	g_pFrameBufferMutex = g_mutex_new ();
+
+	pGlConfig = gdk_gl_config_new_by_mode (GDK_GL_MODE_RGB	 |
+										   GDK_GL_MODE_ALPHA |
+										   GDK_GL_MODE_DEPTH |
+										   GDK_GL_MODE_DOUBLE);
+
+
+	if (!pGlConfig)
+		return 1;
+
+	pWindow = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+	if (!pWindow)
+		return 2;
+
+	gtk_widget_add_events (pWindow,
+						   GDK_POINTER_MOTION_MASK |
+						   GDK_BUTTON_PRESS_MASK |
+						   GDK_BUTTON_RELEASE_MASK);
+
+	g_signal_connect (G_OBJECT (pWindow),
+					  "delete-event",
+					  G_CALLBACK (end_func),
+					  NULL);
+	g_signal_connect (G_OBJECT (pWindow),
+					  "button-press-event",
+					  G_CALLBACK (button_handler),
+					  NULL);
+	g_signal_connect (G_OBJECT (pWindow),
+					  "button-release-event",
+					  G_CALLBACK (button_handler),
+					  NULL);
+	g_signal_connect (G_OBJECT (pWindow),
+					  "scroll-event",
+					  G_CALLBACK (scroll_handler),
+					  NULL);
+	g_signal_connect (G_OBJECT (pWindow),
+					  "motion-notify-event",
+					  G_CALLBACK (motion_handler),
+					  (gpointer) pDrawingArea);
+	g_signal_connect (G_OBJECT (pWindow),
+					  "screen-changed",
+					  G_CALLBACK (on_screen_changed),
+					  NULL);
+
+	pDrawingArea = gtk_drawing_area_new ();
+	if (!pDrawingArea)
+		return 3;
+
+	iWidth = 848;
+	iHeight = 352;
+	gtk_widget_set_size_request (pDrawingArea, iWidth, iHeight);
+	gtk_widget_set_gl_capability (pDrawingArea,
+								  pGlConfig,
+								  NULL,
+								  TRUE,
+								  GDK_GL_RGBA_TYPE);
+
+	g_signal_connect_after (G_OBJECT (pDrawingArea),
+							"realize",
+							G_CALLBACK (realize),
+							NULL);
+	g_signal_connect (G_OBJECT (pDrawingArea),
+					  "configure-event",
+					  G_CALLBACK (configure_event),
+					  NULL);
+	g_signal_connect (G_OBJECT (pDrawingArea),
+					  "expose-event",
+					  G_CALLBACK (expose_event),
+					  NULL);
+
+	gtk_container_add (GTK_CONTAINER (pWindow), pDrawingArea);
+	gtk_widget_show (pDrawingArea);
+
+	on_screen_changed (pWindow, NULL, NULL);
+	gtk_widget_set_app_paintable (pWindow, TRUE);
+	gtk_window_set_decorated (GTK_WINDOW (pWindow), FALSE);
+	gtk_window_set_resizable (GTK_WINDOW (pWindow), FALSE);
+	gtk_widget_show (pWindow);
+
+	uiDrawHandlerId = g_timeout_add (16,
+									 (GSourceFunc) draw_handler,
+									 pDrawingArea);
+	g_pTimerId = g_timer_new ();
+
+	/* make sure we got some input */
+	if (argc != 2)
+	{
+		g_print ("Usage: %s <filename>\n", argv[0]);
+		return -1;
+	}
+
+	build_pipeline (argv[1],
+					&pLoopH264,
+					&g_pPipelineH264,
+					bus_call,
+					(GCallback) on_pad_added,
+					&pVideoPadH264,
+					(GCallback) on_handoff,
+					(gpointer) pDrawingArea);
+
+	g_signal_connect (G_OBJECT (pWindow),
+					  "key-press-event",
+					  G_CALLBACK (key_press_handler),
+					  pLoopH264);
+
+	g_timeout_add (1000, (GSourceFunc) spit_out_clip_stats, pVideoPadH264);
+
+	/* Now set to playing and iterate. */
+	gst_element_set_state (g_pPipelineH264, GST_STATE_PLAYING);
+	g_main_loop_run (pLoopH264);
+
+	gtk_main ();
+
+	glDeleteTextures (1, &g_uiColorBuffer);
+	if (g_bInitialized)
+	{
+		g_mutex_lock (g_pFrameBufferMutex);
+		g_free (g_pcFrameBuffer);
+		g_mutex_unlock (g_pFrameBufferMutex);
+	}
+
+	g_mutex_free (g_pFrameBufferMutex);
+
+	if (g_pPipelineH264)
+	{
+		gst_element_set_state (g_pPipelineH264, GST_STATE_NULL);
+		gst_object_unref (GST_OBJECT (g_pPipelineH264));
+	}
+
+	return 0;
+}

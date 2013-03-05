@@ -1,7 +1,0 @@
-Client misc notes:
-
-Coordinates are left to right increasing, bottom to top increasing. (North, East incrementing).
-
-Viewport is fixed at 45 degrees? Or voxel/rotatable. That makes screenspace computation harder. Slightly. 
-
-Entities 

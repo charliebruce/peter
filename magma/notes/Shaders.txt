@@ -1,0 +1,99 @@
+Shaders - RTS:
+
+Terrain - sample, blend
+Light 
+Water
+FX/particles
+Phong
+Buildings
+BumpMap
+Perlin/Caustics
+Trees/SSC
+
+
+Lambert
+Phong 
+Metallic
+
+Albedo
+
+
+Bloom/PP/CC/AA/grain/FoW (+ combined)
+
+Curved world RPG - DeathSpank
+
+sampler2dRECT?!?!?!?!?!?!?
+
+CC: 
+Gamma:
+outPixel = (pow(((inPixel * 255.0) - inBlack) / (inWhite - inBlack),
+                inGamma) * (outWhite - outBlack) + outBlack) / 255.0;
+Advanced mode:
+Create a new 1x256-pixel RGB image in Photoshop.
+Set the foreground and background colors to white and black, respectively.
+Using the Gradient tool, apply a gradient ramp from the leftmost pixel to the rightmost pixel in the image, ranging from black on the left to white on the right. (Save this gradient as a reference: you may need it later.)
+Now apply your saved ".acv" Curves file to the gradient file. If you have applied different adjustments to each color channel, the previously gray ramp will now show color banding. Figure 22-5 shows an example.
+ 
+Figure 22-5 Grayscale RGB and Modified RGB Ramps
+
+Save the new, colored ramp image in a form appropriate for texture mapping in your program (such as DDS or Targa formats).
+We can now apply the following lines of shader code to the input color, using this correction texture map, to arbitrarily re-create any color alterations performed with the Curves tool (the same method can also be applied to Levels, if desired).
+
+float3 InColor = tex2D(inSampler, IN.UV).xyz;
+float3 OutColor;
+OutColor.r = tex1D(ColorCorrMap, InColor.r).r;
+OutColor.g = tex1D(ColorCorrMap, InColor.g).g;
+OutColor.b = tex1D(ColorCorrMap, InColor.b).b;
+
+Have you considered rendering to an off-screen framebuffer? Have a look for tutorials relating to "render to texture". Then you can think of rendering as taking a picture, and you can use any shader you like when transferring that rendered picture to your window. Any GPU that supports OpenGL 2.0 should be fine with this.
+
+When the application starts, you create an FBO (framebuffer object) with the same resolution as the window. I'd recommend GL_RGBA16F for its internal format, as it has enough accuracy to withstand a wide variety of colour-corrections, and its high dynamic range allows a wide variety of interesting special effects.
+
+For each frame, you'd render everything* into the FBO, instead of into the window.
+
+Finally, you'd bind a gamma-correction fragment shader, and using that FBO as a texture, render a window-filling quad. Voila: gamma-corrected OpenGL. You could easily add brightness/contrast, white-balance & exposure controls, too.
+
+
+
+*except for the gamma controls themselves. You'd probably want to draw them last, straight into the window, so they can't be accidentally made invisible. 
+
+
+
+
+For good engine
+Sponza/GI/SSAO (blender?)
+hdri
+
+"true" refraction with backface culling and zbuffer?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ Vacuum	1.00000
+ Air at STP	1.00029
+ Ice	1.31
+ Water at 20 C	1.33
+ Acetone	1.36
+ Ethyl alcohol	1.36
+ Sugar solution (30%)	1.38
+ Fluorite	1.433
+ Fused quartz	1.46
+ Glycerine	1.473
+ Sugar solution (80%)	1.49
+ Typical crown glass	1.52
+ Crown glasses	1.52 - 1.62
+
